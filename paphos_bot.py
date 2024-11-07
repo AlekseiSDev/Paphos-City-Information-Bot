@@ -8,46 +8,44 @@ import shlex
 
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+import telebot
+import openai
 
-# Load environment variables from .env file
+# Загрузка переменных окружения из .env файла
 load_dotenv()
 
-# Constants for API keys
+# Получение ключей и токенов из переменных окружения
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 BING_API_KEY = os.getenv('BING_API_KEY')
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 
-# Constants for APIs
+# Константы для API
 BING_SEARCH_ENDPOINT = "https://api.bing.microsoft.com/v7.0/search"
-NEWS_RSS_FEED_URL = "https://www.paphosnews.com.cy/rss"  # Example RSS feed URL
+NEWS_RSS_FEED_URL = "https://www.paphosnews.com.cy/rss"  # Пример URL RSS
 SEA_TEMPERATURE_API_URL = "https://api.openweathermap.org/data/2.5/weather"
 
-# Allowed system commands for execution
-ALLOWED_COMMANDS = ['echo', 'date', 'uptime']  # Example commands
+# Разрешенные системные команды
+ALLOWED_COMMANDS = ['echo', 'date', 'uptime']  # Пример разрешенных команд
+
+# Инициализация бота
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 def load_data(file_path):
     """
-    Load and return data from a JSON file.
+    Загрузка данных из JSON файла.
     """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         return data
     except Exception as e:
-        print(f"Error loading {file_path}: {e}")
+        print(f"Ошибка при загрузке {file_path}: {e}")
         return {}
-
-def initialize_openai():
-    """
-    Initialize the OpenAI API client.
-    """
-    import openai
-    openai.api_key = OPENAI_API_KEY
-    return openai
 
 def perform_internet_search(query, max_links=3):
     """
-    Perform an internet search using Bing Search API and return top links.
+    Выполнение интернет-поиска с использованием Bing Search API и возвращение ссылок.
     """
     headers = {"Ocp-Apim-Subscription-Key": BING_API_KEY}
     params = {"q": query, "textDecorations": True, "textFormat": "HTML", "count": max_links}
@@ -62,29 +60,29 @@ def perform_internet_search(query, max_links=3):
                 break
         return links
     except Exception as e:
-        print(f"Error during internet search: {e}")
-        return ["No links found."]
+        print(f"Ошибка при поиске в интернете: {e}")
+        return ["Ссылок не найдено."]
 
 def fetch_latest_news():
     """
-    Fetch the latest news headlines from the RSS feed.
+    Получение последних новостей из RSS-ленты.
     """
     try:
         feed = feedparser.parse(NEWS_RSS_FEED_URL)
         headlines = []
-        for entry in feed.entries[:3]:  # Get top 3 headlines
+        for entry in feed.entries[:3]:  # Получение топ-3 новостей
             headlines.append(f"- \"{entry.title}\"")
         return headlines
     except Exception as e:
-        print(f"Error fetching news: {e}")
-        return ["No news available at the moment."]
+        print(f"Ошибка при получении новостей: {e}")
+        return ["Новости в данный момент недоступны."]
 
 def get_sea_water_temperature():
     """
-    Get the current sea water temperature in Paphos using OpenWeatherMap API.
+    Получение текущей температуры морской воды в Пафосе с использованием OpenWeatherMap API.
     """
     try:
-        # Coordinates for Paphos, Cyprus
+        # Координаты Пафоса, Кипр
         latitude = 34.7757
         longitude = 32.4243
         params = {
@@ -96,52 +94,53 @@ def get_sea_water_temperature():
         response = requests.get(SEA_TEMPERATURE_API_URL, params=params)
         response.raise_for_status()
         weather_data = response.json()
-        # Assuming 'main.temp' gives the sea water temperature; adjust based on API
+        # Предполагается, что 'main.temp' предоставляет температуру морской воды; возможно, потребуется корректировка
         temperature = weather_data['main']['temp']
-        return f"The current sea water temperature in Paphos is {temperature}°C."
+        return f"Текущая температура морской воды в Пафосе составляет {temperature}°C."
     except Exception as e:
-        print(f"Error fetching sea water temperature: {e}")
-        return "Unable to retrieve sea water temperature at the moment."
+        print(f"Ошибка при получении температуры морской воды: {e}")
+        return "Не удалось получить температуру морской воды в данный момент."
 
 def report_system_time():
     """
-    Report the current system time.
+    Получение текущего системного времени.
     """
     current_time = datetime.datetime.now().strftime("%H:%M")
-    return f"The current system time is {current_time}."
+    return f"Текущее системное время: {current_time}."
 
 def execute_allowed_command(command):
     """
-    Execute a system command if it's in the allowed list.
+    Выполнение системной команды, если она разрешена.
     """
     try:
         cmd_parts = shlex.split(command)
         cmd = cmd_parts[0]
         if cmd not in ALLOWED_COMMANDS:
-            return "This command is not allowed."
+            return "Эта команда не разрешена."
         result = subprocess.run(cmd_parts, capture_output=True, text=True, check=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        return f"Error executing command: {e}"
+        return f"Ошибка при выполнении команды: {e}"
     except Exception as e:
-        return f"Unexpected error: {e}"
+        return f"Неожиданная ошибка: {e}"
 
-def generate_response(user_input, data, openai_client):
+def generate_response(user_input, data):
     """
-    Generate a response by combining LLM output with data.json.
+    Генерация ответа с использованием OpenAI GPT.
     """
     try:
-        prompt = f"""You are a helpful assistant with knowledge about Paphos city. Use both your general knowledge and the following data to answer the user.
+        openai.api_key = OPENAI_API_KEY
+        prompt = f"""Ты — полезный ассистент с информацией о городе Пафос. Используй как свои общие знания, так и следующие данные для ответа пользователю.
 
-Data:
-{json.dumps(data)}
+Данные:
+{json.dumps(data, ensure_ascii=False)}
 
-User Query: {user_input}
+Запрос пользователя: {user_input}
 
-Response:"""
+Ответ:"""
 
-        response = openai_client.Completion.create(
-            engine="text-davinci-003",  # You can choose the appropriate model
+        response = openai.Completion.create(
+            engine="text-davinci-003",  # Можно выбрать другую модель, например, GPT-4, если доступно
             prompt=prompt,
             max_tokens=500,
             n=1,
@@ -150,51 +149,61 @@ Response:"""
         )
         return response.choices[0].text.strip()
     except Exception as e:
-        print(f"Error generating response: {e}")
-        return "I'm sorry, I couldn't process your request at the moment."
+        print(f"Ошибка при генерации ответа: {e}")
+        return "Извините, не удалось обработать ваш запрос в данный момент."
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    welcome_text = (
+        "Добро пожаловать в Информационного Бота по Городy Пафос!\n"
+        "Вы можете задать мне вопросы о Пафосе, и я постараюсь помочь.\n"
+        "Доступные команды:\n"
+        "- Задать вопрос о достопримечательностях, истории и культуре Пафоса.\n"
+        "- Узнать текущую температуру морской воды.\n"
+        "- Узнать текущее системное время.\n"
+        "- Ввести 'exit' для завершения диалога.\n"
+    )
+    bot.reply_to(message, welcome_text)
+
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    user_input = message.text.strip().lower()
+
+    if user_input == 'exit':
+        bot.reply_to(message, "До свидания!")
+        return
+
+    elif 'время' in user_input:
+        response = report_system_time()
+
+    elif 'температура морской воды' in user_input or 'температура моря' in user_input:
+        response = get_sea_water_temperature()
+
+    elif 'выполни команду' in user_input or 'execute' in user_input:
+        # Пример: "Выполни команду echo Привет"
+        command = user_input.replace('выполни команду', '').replace('execute', '').strip()
+        response = execute_allowed_command(command)
+
+    else:
+        # Общий запрос о Пафосе
+        data = load_data('data.json')
+        llm_response = generate_response(message.text, data)
+
+        # Выполнение интернет-поиска
+        search_links = perform_internet_search(message.text + " Пафос")
+
+        # Получение последних новостей
+        latest_news = fetch_latest_news()
+
+        # Составление окончательного ответа
+        response = f"{llm_response}\n\nВот некоторые полезные ссылки:\n" + "\n".join(search_links) + \
+                   "\n\nТакже последние новости из Пафоса:\n" + "\n".join(latest_news)
+
+    bot.reply_to(message, response)
 
 def main():
-    # Load data from data.json
-    data = load_data('data.json')
-
-    # Initialize OpenAI
-    openai_client = initialize_openai()
-
-    print("Welcome to the Paphos City Information Bot! Type 'exit' to quit.\n")
-
-    while True:
-        user_input = input("User: ").strip().lower()
-
-        if user_input == 'exit':
-            print("Bot: Goodbye!")
-            break
-
-        elif 'time' in user_input:
-            response = report_system_time()
-
-        elif 'sea water temperature' in user_input or 'sea temperature' in user_input:
-            response = get_sea_water_temperature()
-
-        elif any(keyword in user_input for keyword in ['command', 'execute']):
-            # Example: User might ask to execute a command
-            command = user_input.replace('execute', '').strip()
-            response = execute_allowed_command(command)
-
-        else:
-            # General query about Paphos
-            llm_response = generate_response(user_input, data, openai_client)
-
-            # Perform internet search
-            search_links = perform_internet_search(user_input + " Paphos")
-
-            # Fetch latest news
-            latest_news = fetch_latest_news()
-
-            # Combine all parts
-            response = f"{llm_response}\n\nHere are some links you might find helpful:\n" + "\n".join(search_links) + \
-                       "\n\nAlso, here are the latest news from Paphos:\n" + "\n".join(latest_news)
-
-        print(f"Bot: {response}\n")
+    print("Бот запущен и работает...")
+    bot.infinity_polling()
 
 if __name__ == "__main__":
     main()

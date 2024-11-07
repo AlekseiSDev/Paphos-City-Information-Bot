@@ -1,3 +1,4 @@
+pytelegrambotapi
 openai
 requests
 beautifulsoup4
