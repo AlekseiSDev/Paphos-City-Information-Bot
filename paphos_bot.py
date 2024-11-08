@@ -100,6 +100,31 @@ def get_sea_water_temperature():
     except Exception as e:
         print(f"Ошибка при получении температуры морской воды: {e}")
         return "Не удалось получить температуру морской воды в данный момент."
+    
+def get_air_temperature():
+    """
+    Получение текущей температуры воздуха в Пафосе с использованием OpenWeatherMap API.
+    """
+    # TODO: fix it
+    try:
+        # Координаты Пафоса, Кипр
+        latitude = 34.7757
+        longitude = 32.4243
+        params = {
+            'lat': latitude,
+            'lon': longitude,
+            'appid': WEATHER_API_KEY,
+            'units': 'metric'
+        }
+        response = requests.get(SEA_TEMPERATURE_API_URL, params=params)
+        response.raise_for_status()
+        weather_data = response.json()
+        # Предполагается, что 'main.temp' предоставляет температуру морской воды; возможно, потребуется корректировка
+        temperature = weather_data['main']['temp']
+        return f"Текущая температура морской воды в Пафосе составляет {temperature}°C."
+    except Exception as e:
+        print(f"Ошибка при получении температуры морской воды: {e}")
+        return "Не удалось получить температуру морской воды в данный момент."
 
 def report_system_time():
     """
@@ -173,14 +198,18 @@ def handle_message(message):
         bot.reply_to(message, "До свидания!")
         return
 
-    elif 'время' in user_input:
+    elif 'время' or "date" or "datetime" in user_input:
         response = report_system_time()
 
-    elif 'температура морской воды' in user_input or 'температура моря' in user_input:
+    elif ('температура' in user_input and ('моря' in user_input or 'воды' in user_input)) \
+        or ('temperature' in user_input and ('sea' in user_input or 'water' in user_input)):
         response = get_sea_water_temperature()
 
+    elif ('температура' in user_input and ('воздуха' in user_input or 'улице' in user_input)) \
+        or ('temperature' in user_input and ('air' in user_input or 'outside' in user_input)):
+        response = get_air_temperature()
+
     elif 'выполни команду' in user_input or 'execute' in user_input:
-        # Пример: "Выполни команду echo Привет"
         command = user_input.replace('выполни команду', '').replace('execute', '').strip()
         response = execute_allowed_command(command)
 
