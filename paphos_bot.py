@@ -23,7 +23,6 @@ WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 # Константы для API
 BING_SEARCH_ENDPOINT = "https://api.bing.microsoft.com/v7.0/search"
 NEWS_RSS_FEED_URL = "https://www.paphosnews.com.cy/rss"  # Пример URL RSS
-SEA_TEMPERATURE_API_URL = "https://api.openweathermap.org/data/2.5/weather"
 
 # Разрешенные системные команды
 ALLOWED_COMMANDS = ['echo', 'date', 'uptime']  # Пример разрешенных команд
@@ -91,6 +90,8 @@ def get_sea_water_temperature():
             'appid': WEATHER_API_KEY,
             'units': 'metric'
         }
+        SEA_TEMPERATURE_API_URL = "https://api.openweathermap.org/data/2.5/weather"
+        # https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid={YOUR_API_KEY}
         response = requests.get(SEA_TEMPERATURE_API_URL, params=params)
         response.raise_for_status()
         weather_data = response.json()
@@ -105,26 +106,22 @@ def get_air_temperature():
     """
     Получение текущей температуры воздуха в Пафосе с использованием OpenWeatherMap API.
     """
-    # TODO: fix it
     try:
-        # Координаты Пафоса, Кипр
-        latitude = 34.7757
-        longitude = 32.4243
         params = {
-            'lat': latitude,
-            'lon': longitude,
+            'q': 'paphos',
             'appid': WEATHER_API_KEY,
             'units': 'metric'
         }
+        SEA_TEMPERATURE_API_URL = "https://api.openweathermap.org/data/2.5/weather"
         response = requests.get(SEA_TEMPERATURE_API_URL, params=params)
         response.raise_for_status()
         weather_data = response.json()
         # Предполагается, что 'main.temp' предоставляет температуру морской воды; возможно, потребуется корректировка
         temperature = weather_data['main']['temp']
-        return f"Текущая температура морской воды в Пафосе составляет {temperature}°C."
+        return f"Текущая температура воздуха в Пафосе составляет {temperature}°C."
     except Exception as e:
-        print(f"Ошибка при получении температуры морской воды: {e}")
-        return "Не удалось получить температуру морской воды в данный момент."
+        print(f"Ошибка при получении температуры воздуха: {e}")
+        return "Не удалось получить температуру воздуха в данный момент."
 
 def report_system_time():
     """
@@ -180,40 +177,48 @@ def generate_response(user_input, data):
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
-        "Добро пожаловать в Информационного Бота по Городy Пафос!\n"
+        "Добро пожаловать в Информационного Бота по городy Пафос!\n"
         "Вы можете задать мне вопросы о Пафосе, и я постараюсь помочь.\n"
         "Доступные команды:\n"
-        "- Задать вопрос о достопримечательностях, истории и культуре Пафоса.\n"
-        "- Узнать текущую температуру морской воды.\n"
-        "- Узнать текущее системное время.\n"
-        "- Ввести 'exit' для завершения диалога.\n"
+        "- 'время' или 'date': получить текущее системное время\n"
+        "- 'температура моря' или 'sea temperature': получить температуру морской воды\n"
+        "- 'температура воздуха' или 'air temperature': получить температуру воздуха\n"
+        "- 'выполни команду [команда]': выполнить разрешенную системную команду\n"
+        "- 'exit': завершить беседу с ботом\n"
     )
     bot.reply_to(message, welcome_text)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     user_input = message.text.strip().lower()
+    print(f"User input: {user_input}")
 
     if user_input == 'exit':
+        print("User requested to exit.")
         bot.reply_to(message, "До свидания!")
         return
 
-    elif 'время' or "date" or "datetime" in user_input:
+    elif 'время' in user_input or "date" in user_input or "datetime" in user_input:
+        print("User asked for system time.")
         response = report_system_time()
 
     elif ('температура' in user_input and ('моря' in user_input or 'воды' in user_input)) \
         or ('temperature' in user_input and ('sea' in user_input or 'water' in user_input)):
+        print("User asked for sea water temperature.")
         response = get_sea_water_temperature()
 
     elif ('температура' in user_input and ('воздуха' in user_input or 'улице' in user_input)) \
         or ('temperature' in user_input and ('air' in user_input or 'outside' in user_input)):
+        print("User asked for air temperature.")
         response = get_air_temperature()
 
     elif 'выполни команду' in user_input or 'execute' in user_input:
+        print("User requested to execute a command.")
         command = user_input.replace('выполни команду', '').replace('execute', '').strip()
         response = execute_allowed_command(command)
 
     else:
+        print("else sectiont => user asked a general question.")
         # Общий запрос о Пафосе
         data = load_data('data.json')
         llm_response = generate_response(message.text, data)
