@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import telebot
 import openai
+from news import fetch_latest_news
 
 # Загрузка переменных окружения из .env файла
 load_dotenv()
@@ -22,10 +23,10 @@ WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
 
 # Константы для API
 BING_SEARCH_ENDPOINT = "https://api.bing.microsoft.com/v7.0/search"
-NEWS_RSS_FEED_URL = "https://www.paphosnews.com.cy/rss"  # Пример URL RSS
 
 # Разрешенные системные команды
 ALLOWED_COMMANDS = ['echo', 'date', 'uptime']  # Пример разрешенных команд
+user_news_progress = {}
 
 # Инициализация бота
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
@@ -61,20 +62,6 @@ def perform_internet_search(query, max_links=3):
     except Exception as e:
         print(f"Ошибка при поиске в интернете: {e}")
         return ["Ссылок не найдено."]
-
-def fetch_latest_news():
-    """
-    Получение последних новостей из RSS-ленты.
-    """
-    try:
-        feed = feedparser.parse(NEWS_RSS_FEED_URL)
-        headlines = []
-        for entry in feed.entries[:3]:  # Получение топ-3 новостей
-            headlines.append(f"- \"{entry.title}\"")
-        return headlines
-    except Exception as e:
-        print(f"Ошибка при получении новостей: {e}")
-        return ["Новости в данный момент недоступны."]
 
 def get_sea_water_temperature():
     """
@@ -183,6 +170,7 @@ def send_welcome(message):
         "- 'время' или 'date': получить текущее системное время\n"
         "- 'температура моря' или 'sea temperature': получить температуру морской воды\n"
         "- 'температура воздуха' или 'air temperature': получить температуру воздуха\n"
+        "- 'новости' или 'news': получить последние новости из Пафоса\n"
         "- 'выполни команду [команда]': выполнить разрешенную системную команду\n"
         "- 'exit': завершить беседу с ботом\n"
     )
@@ -190,6 +178,8 @@ def send_welcome(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
+    user_id = message.from_user.id
+    print(f"userID: {user_id}")
     user_input = message.text.strip().lower()
     print(f"User input: {user_input}")
 
@@ -217,6 +207,13 @@ def handle_message(message):
         command = user_input.replace('выполни команду', '').replace('execute', '').strip()
         response = execute_allowed_command(command)
 
+    elif 'новости' in user_input or 'news' in user_input:
+        print("User asked for news.")
+        latest_news = fetch_latest_news(user_id=user_id, user_progress=user_news_progress)
+        print(f"user_news_progress: {user_news_progress}")
+        # print(f"Latest news: {latest_news}")
+        response = "Вот последние новости из Пафоса:\n" + "\n".join(latest_news)
+
     else:
         print("else sectiont => user asked a general question.")
         # Общий запрос о Пафосе
@@ -225,9 +222,6 @@ def handle_message(message):
 
         # Выполнение интернет-поиска
         search_links = perform_internet_search(message.text + " Пафос")
-
-        # Получение последних новостей
-        latest_news = fetch_latest_news()
 
         # Составление окончательного ответа
         response = f"{llm_response}\n\nВот некоторые полезные ссылки:\n" + "\n".join(search_links) + \
