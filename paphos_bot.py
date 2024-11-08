@@ -1,7 +1,6 @@
 import json
 import os
 import requests
-import feedparser
 import datetime
 import subprocess
 import shlex
@@ -10,19 +9,17 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import telebot
 import openai
-from news import fetch_latest_news
+from openai import OpenAI
+from functions.news import fetch_latest_news
+from functions.search import perform_internet_search, search_and_summarize
 
 # Загрузка переменных окружения из .env файла
 load_dotenv()
 
-# Получение ключей и токенов из переменных окружения
+BING_API_KEY = os.getenv('BING_API_KEY')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-BING_API_KEY = os.getenv('BING_API_KEY')
 WEATHER_API_KEY = os.getenv('WEATHER_API_KEY')
-
-# Константы для API
-BING_SEARCH_ENDPOINT = "https://api.bing.microsoft.com/v7.0/search"
 
 # Разрешенные системные команды
 ALLOWED_COMMANDS = ['echo', 'date', 'uptime']  # Пример разрешенных команд
@@ -42,26 +39,6 @@ def load_data(file_path):
     except Exception as e:
         print(f"Ошибка при загрузке {file_path}: {e}")
         return {}
-
-def perform_internet_search(query, max_links=3):
-    """
-    Выполнение интернет-поиска с использованием Bing Search API и возвращение ссылок.
-    """
-    headers = {"Ocp-Apim-Subscription-Key": BING_API_KEY}
-    params = {"q": query, "textDecorations": True, "textFormat": "HTML", "count": max_links}
-    try:
-        response = requests.get(BING_SEARCH_ENDPOINT, headers=headers, params=params)
-        response.raise_for_status()
-        search_results = response.json()
-        links = []
-        for web_page in search_results.get("webPages", {}).get("value", []):
-            links.append(f"- [{web_page.get('name')}]({web_page.get('url')})")
-            if len(links) == max_links:
-                break
-        return links
-    except Exception as e:
-        print(f"Ошибка при поиске в интернете: {e}")
-        return ["Ссылок не найдено."]
 
 def get_sea_water_temperature():
     """
@@ -149,7 +126,7 @@ def generate_response(user_input, data):
 Ответ:"""
 
         response = openai.Completion.create(
-            engine="text-davinci-003",  # Можно выбрать другую модель, например, GPT-4, если доступно
+            engine="gpt-4o-mini",
             prompt=prompt,
             max_tokens=500,
             n=1,
@@ -171,6 +148,8 @@ def send_welcome(message):
         "- 'температура моря' или 'sea temperature': получить температуру морской воды\n"
         "- 'температура воздуха' или 'air temperature': получить температуру воздуха\n"
         "- 'новости' или 'news': получить последние новости из Пафоса\n"
+        "- 'найди [запрос]' или 'search [query]': выполнить поиск в интернете\n"
+        "- 'найди и саммаризуй [запрос]' или 'search and summarize [query]': выполнить поиск и суммаризацию\n"
         "- 'выполни команду [команда]': выполнить разрешенную системную команду\n"
         "- 'exit': завершить беседу с ботом\n"
     )
@@ -213,6 +192,26 @@ def handle_message(message):
         print(f"user_news_progress: {user_news_progress}")
         # print(f"Latest news: {latest_news}")
         response = "Вот последние новости из Пафоса:\n" + "\n".join(latest_news)
+
+    elif "найди и саммаризуй" in user_input or "search and summarize" in user_input:
+        print("User asked for search and summarize.")
+        text_for_search = user_input.replace('найди и саммаризуй', '').replace('search and summarize', '').strip()
+        text_for_search = text_for_search if "Пафос" in text_for_search else text_for_search + " Пафос" 
+        client = OpenAI()
+        search_sum_results = search_and_summarize(text_for_search, BING_API_KEY, client)
+        if search_sum_results:
+            links = "\n".join(search_sum_results["links"])
+            summary = search_sum_results["summary"]
+            response = f"Вот краткое резюме найденных статей:\n{summary}\n\nВот некоторые полезные ссылки:\n{links}"
+        else:
+            response = "Не удалось найти информацию по вашему запросу."
+    
+    elif 'найди' in user_input or 'поищи' in user_input or 'search' in user_input:
+        print("User asked for search.")
+        text_for_search = user_input.replace('найди', '').replace('поищи', '').replace('search', '').strip()
+        text_for_search = text_for_search if "Пафос" in text_for_search else text_for_search + " Пафос" 
+        search_links = perform_internet_search(text_for_search, BING_API_KEY)
+        response = f"Вот некоторые полезные ссылки:\n" + "\n".join(search_links)
 
     else:
         print("else sectiont => user asked a general question.")
